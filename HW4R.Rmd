@@ -1,0 +1,191 @@
+---
+title: "HW4"
+author: "Anna Ohanyan"
+date: "2025-03-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+
+bundesliga <- read.csv("bundesliga.csv")
+#Analyse trend of goals per season. For example total goals per match, average goals per match. (Python or R)
+goals_per_season <- bundesliga %>%
+  group_by(SEASON) %>%
+  summarise(
+    total_goals = sum(FTTG, na.rm = TRUE),
+    avg_goals_per_match = mean(FTTG, na.rm = TRUE)
+  )
+```
+
+```{r}
+ggplot(goals_per_season, aes(x = SEASON, y = total_goals)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "Total Goals per Season in Bundesliga",
+       x = "Season",
+       y = "Total Goals")
+```
+```{r}
+#Goal Distribution Per Season. Use appropriate type of graphs for goals per match, year-wise. Color- code by whether average is above or below 2.5 (over/under bet threshold).
+bundesliga %>%
+  ggplot(aes(x = FTTG, fill = FTTG > 2.5)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  scale_fill_manual(values = c("TRUE" = "blue", "FALSE" = "red")) +
+  labs(title = "Goal Distribution Per Match", x = "Total Goals", y = "Count")
+```
+
+```{r}
+#Create line charts for each season. Visualize trend of goals for each team that played in that season. Highlight only Bayern Munchen with red color. Rest should be gray. Add appropriate title that will contain information about season and total scored goals. Add footnote mentioning total number of goals scored by Bayern Munchen for that season. Save all graphs in pdf.
+
+team_goals <- bundesliga %>%
+  group_by(SEASON, HOMETEAM) %>%
+  summarise(Total_Goals = sum(FTHG, na.rm = TRUE)) 
+
+team_goals$SEASON <- as.factor(team_goals$SEASON)
+
+bayern_goals <- team_goals %>%
+  filter(HOMETEAM == "Bayern Munich")
+
+ggplot(team_goals, aes(x = SEASON, y = Total_Goals, group = HOMETEAM, color = (HOMETEAM == "Bayern Munich"))) +
+  geom_line(size = 1.2) +
+  scale_color_manual(values = c("gray", "red")) +
+  geom_text(data = bayern_goals, aes(label = Total_Goals), color = "red", vjust = -0.5, size = 3) +
+  labs(title = "Goals trend per team per season", x = "Season", y = "Total Goals") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  
+```
+```{r}
+win_data <- bundesliga %>%
+  group_by(SEASON, HOMETEAM) %>%
+  summarise(home_wins = sum(FTR == "H", na.rm = TRUE),
+            away_wins = sum(FTR == "A", na.rm = TRUE))
+
+library(reshape2)
+win_data_melted <- melt(win_data, id.vars = c("SEASON", "HOMETEAM"))
+
+ggplot(win_data_melted, aes(x = SEASON, y = HOMETEAM, fill = value)) +
+  geom_tile() +
+  facet_wrap(~variable) +
+  labs(title = "Heatmap of Home vs. Away Wins", x = "Season", y = "Team")
+#did this in python, but want it be here so you can say what is the mistake
+```
+
+```{r}
+#part 3 1
+top_teams <- bundesliga %>%
+  filter(HOMETEAM %in% c("Bayern Munchen", "Borussia Dortmund", "RB Leipzig", "Schalke 04", "Leverkusen", "Gladbach")) %>%
+  group_by(SEASON, HOMETEAM) %>%
+  summarise(Avg_Rank = mean(FTTG, na.rm = TRUE))  
+
+ggplot(top_teams, aes(x = SEASON, y = Avg_Rank, group = HOMETEAM, color = HOMETEAM)) +
+  geom_line() +
+  scale_y_reverse() +  
+  labs(title = "Seasonal Position Trajectories", x = "Season", y = "Rank") +
+  theme_minimal()
+```
+```{r}
+#part 3 2
+volatility <- bundesliga %>%
+  group_by(HOMETEAM) %>%
+  summarise(sd_rank = sd(FTTG, na.rm = TRUE))  
+
+ggplot(volatility, aes(x = reorder(HOMETEAM, -sd_rank), y = sd_rank, fill = sd_rank > 1)) + 
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = round(sd_rank, 2)), vjust = -0.5) +  
+  scale_fill_manual(values = c("red", "green"), labels = c("Unstable", "Consistent")) +
+  labs(title = "Volatility Index", x = "Team", y = "Standard deviation of rank") +
+  theme_minimal()
+```
+```{r}
+rival_teams <- c("Bayern Munchen", "Borussia Dortmund", "RB Leipzig", "Schalke 04", "Leverkusen")
+
+# part 5
+rivalries_data <- bundesliga %>%
+  filter(HOMETEAM %in% rival_teams | AWAYTEAM %in% rival_teams) %>%
+  mutate(
+    RIVALRY = case_when(
+      HOMETEAM %in% rival_teams & AWAYTEAM %in% rival_teams ~ paste(HOMETEAM, "vs", AWAYTEAM),
+      TRUE ~ NA_character_
+    ),
+    RESULT = case_when(
+      FTHG > FTAG ~ "H",  
+      FTHG < FTAG ~ "A",  
+      TRUE ~ "D"          
+    )
+  ) %>%
+  filter(!is.na(RIVALRY)) %>%  
+  group_by(RIVALRY, RESULT) %>%
+  summarise(Count = n(), .groups = 'drop')
+
+
+print(rivalries_data)
+
+if (nrow(rivalries_data) == 0) {
+  print("No data available for the selected rivalries.")
+} else {
+  ggplot(rivalries_data, aes(x = RESULT, y = Count, fill = RESULT)) +
+    geom_bar(stat = "identity") +
+    facet_wrap(~ RIVALRY, scales = "free_y") +
+    labs(title = "Head-to-Head Results for selected rivalries",
+         y = "Count", x = "Result") +
+    theme_minimal() +
+    geom_text(aes(label = Count), position = position_stack(vjust = 0.5))
+}
+```
+```{r}
+rival_teams <- c("Bayern Munchen", "Borussia Dortmund", "RB Leipzig", "Schalke 04", "Leverkusen")
+
+# Calculate points based on results (replace RESULT_COLUMN_NAME with the actual name)
+bundesliga <- bundesliga %>%
+  mutate(POINTS = case_when(
+    RESULT_COLUMN_NAME == "H" ~ 3,  
+    RESULT_COLUMN_NAME == "A" ~ 0,  
+    RESULT_COLUMN_NAME == "D" ~ 1,  
+    TRUE ~ 0                        
+  ))
+
+
+top_teams <- bundesliga %>%
+  group_by(HOMETEAM) %>%
+  summarise(Total_Points = sum(POINTS, na.rm = TRUE)) %>%
+  arrange(desc(Total_Points)) %>%
+  top_n(5) %>%
+  pull(HOMETEAM)
+
+upset_data <- bundesliga %>%
+  filter(HOMETEAM %in% top_teams | AWAYTEAM %in% top_teams) %>%
+  mutate(
+    RANK_DIFF = case_when(
+      HOMETEAM %in% top_teams ~ rank(-FTAG),  
+      AWAYTEAM %in% top_teams ~ rank(-FTTG), 
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(RANK_DIFF > 8 & RESULT_COLUMN_NAME == "A") %>%  
+  select(WINNER = AWAYTEAM, LOSER = HOMETEAM, RANK_DIFF, GOAL_DIFF = abs(FTHG - FTAG)) 
+print(upset_data)
+
+ggplot(upset_data, aes(x = RANK_DIFF, y = GOAL_DIFF, color = WINNER)) +
+  geom_point(size = 3) +
+  labs(title = "Upset Visualizer: Team performance",
+       x = "Rank Difference", y = "Goal difference") +
+  theme_minimal() +
+  geom_text(aes(label = WINNER), vjust = -1, hjust = 0.5)
+#Tried with python, but did not get any results
+```
+
+```{r}
+# 5 Define unique color for each team per season. For each season create horizontal bar plot using total number of points. Highlighting the winner with the unique color that you assigned to it. Save all graphs in pdf. (R)
+ 
+bundesliga %>%
+  ggplot(aes(x = SEASON, y = FTTG, fill = HOMETEAM)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Overall performance per Team", x = "Season", y = "Total Goals")
+```
